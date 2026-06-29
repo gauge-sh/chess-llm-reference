@@ -46,8 +46,8 @@ SYSTEM_PROMPT = (
 
 
 def tool_specs() -> list[dict]:
-    """OpenAI-style function/tool specs — the de-facto standard understood by every
-    OpenAI-compatible gateway."""
+    """Function/tool specs in the standard chat-completions shape understood by
+    compatible endpoints."""
     return [
         {"type": "function", "function": {"name": TOOL_GET_LEGAL_MOVES, "description": _GET_LEGAL_MOVES_DESC, "parameters": _EMPTY_PARAMS}},
         {"type": "function", "function": {"name": TOOL_MAKE_MOVE, "description": _MAKE_MOVE_DESC, "parameters": _MAKE_MOVE_PARAMS}},

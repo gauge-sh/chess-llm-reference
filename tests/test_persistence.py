@@ -4,7 +4,7 @@ from chess_llm.engine import ChessEngine
 
 def _play_game() -> int:
     eng = ChessEngine()
-    game_id = repository.create_game("human", "claude-test", eng.fen)
+    game_id = repository.create_game("human", "test-model", eng.fen)
     for mv in ["e2e4", "e7e5", "g1f3", "b8c6"]:
         applied = eng.apply(mv)
         repository.record_move(game_id, applied, player="human")
@@ -36,7 +36,7 @@ def test_trace_with_spans_round_trip():
     game_id = _play_game()
     trace_id = repository.record_trace(
         game_id=game_id,
-        model="claude-test",
+        model="test-model",
         input_tokens=120,
         output_tokens=30,
         latency_ms=900,
@@ -54,7 +54,7 @@ def test_trace_with_spans_round_trip():
 def test_game_summary_metrics():
     game_id = _play_game()
     repository.record_trace(
-        game_id=game_id, model="claude-test", input_tokens=100, output_tokens=20, latency_ms=500,
+        game_id=game_id, model="test-model", input_tokens=100, output_tokens=20, latency_ms=500,
         spans=[{"tool_name": "make_move", "tool_input": {"uci": "zz"}, "tool_output": {"ok": False}, "is_error": True},
                {"tool_name": "make_move", "tool_input": {"uci": "e7e5"}, "tool_output": {"ok": True}}],
     )

@@ -9,7 +9,7 @@ Every vendor decision is an interchangeable adapter behind a config seam. There 
 
 | Seam | How you choose a vendor | Works with |
 |---|---|---|
-| **LLM** | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Any OpenAI-compatible chat-completions endpoint — OpenAI, Anthropic's compat API, hosted gateways, self-hosted (vLLM), local (Ollama), … |
+| **LLM** | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Any endpoint that speaks the standard chat-completions JSON protocol |
 | **Database** | `DATABASE_URL` (any SQLAlchemy URL) | Local SQLite out of the box; any hosted Postgres by swapping the URL |
 
 The point: swap the gateway or the database by editing `.env`, never the code.
@@ -21,7 +21,7 @@ web/  (Next.js)  ──HTTP──▶  chess_llm/api.py  (FastAPI)
                                   │
                  ┌────────────────┼─────────────────┐
               game.py          llm.py            analysis.py
-           (orchestration)  (OpenAI-compatible    (rewind +
+           (orchestration)  (chat-completions     (rewind +
                                 tool-call loop)     metrics)
                  │                │                   │
               engine.py      repository.py  ◀──────────┘
@@ -42,9 +42,10 @@ Design notes:
          └─ traces  (one per LLM turn: request, response, tokens, latency, status)
               └─ spans  (one per tool call: name, input, output, errors)
   ```
-- **The LLM is a swappable adapter.** `llm.py` speaks the OpenAI protocol (the
-  de-facto standard). To use a non-OpenAI-shaped vendor, implement the `Player`
-  protocol in a new module and return it from `make_player`.
+- **The LLM is a swappable adapter.** `llm.py` speaks the standard chat-completions
+  JSON protocol over plain HTTP (no third-party client SDK). To use an endpoint with a
+  different wire format, implement the `Player` protocol in a new module and return it
+  from `make_player`.
 
 ## Quick start
 
@@ -99,11 +100,11 @@ latency, and trace id.
 
 ## Choosing your vendors
 
-**LLM** — set three env vars; the code is identical for every provider:
+**LLM** — set three env vars; the code is identical for every endpoint:
 
 ```bash
-LLM_BASE_URL=https://<your-openai-compatible-host>/v1
-LLM_API_KEY=...            # blank is fine for keyless local endpoints
+LLM_BASE_URL=https://<your-host>/v1
+LLM_API_KEY=...            # blank is fine for endpoints that need no auth
 LLM_MODEL=<model-id>
 ```
 
@@ -115,7 +116,8 @@ DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
 ```
 
 `pool_pre_ping` is on, so serverless Postgres that drops idle connections is fine.
-Tables are auto-created on startup; add Alembic if you need migrations in production.
+Tables are auto-created on startup; add a schema-migration tool if you need migrations
+in production.
 
 ## Tests
 
@@ -125,12 +127,12 @@ Tables are auto-created on startup; add Alembic if you need migrations in produc
 
 ## Extending
 
-- **New LLM adapter** (non-OpenAI shape): implement `Player.choose_move` returning a
-  `MoveChoice`, reuse `tools.execute_tool` so the engine still validates moves, and
+- **New LLM adapter** (different wire format): implement `Player.choose_move` returning
+  a `MoveChoice`, reuse `tools.execute_tool` so the engine still validates moves, and
   return it from `make_player`. Nothing else changes.
 - **External tracing** (e.g. an analytics or error platform): traces already live in
   the DB — add a sink inside `repository.record_trace`.
-- **Stronger analysis**: drop in an engine like Stockfish to score moves and turn
+- **Stronger analysis**: drop in a dedicated chess engine to score moves and turn
   `analyze` into real blunder detection.
 - **Auth / multi-user**: add per-user scoping in `repository` and an auth layer in
   `api.py`; the rest is unaffected.

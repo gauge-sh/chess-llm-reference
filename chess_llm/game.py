@@ -1,4 +1,4 @@
-"""Game orchestration: ties the engine, persistence, and the LLM player together."""
+"""Game orchestration: connects the engine, persistence, and the LLM player."""
 
 from __future__ import annotations
 

@@ -2,9 +2,9 @@
 
 The two pluggable seams:
 
-* **LLM** — any OpenAI-compatible chat-completions endpoint. Set ``LLM_BASE_URL``,
-  ``LLM_API_KEY`` and ``LLM_MODEL``. Works with any gateway that speaks the OpenAI
-  protocol; see ``.env.example`` for several interchangeable options.
+* **LLM** — any chat-completions HTTP endpoint. Set ``LLM_BASE_URL``, ``LLM_API_KEY``
+  and ``LLM_MODEL``. Works with any endpoint that speaks the standard chat-completions
+  JSON protocol; nothing about a specific host is baked in.
 * **Database** — any SQLAlchemy URL via ``DATABASE_URL``. Defaults to local SQLite;
   point it at a hosted Postgres to use a managed provider. No driver lock-in beyond
   "it's a SQLAlchemy URL".
@@ -25,8 +25,8 @@ except ImportError:  # python-dotenv is optional at runtime
 
 @dataclass(frozen=True)
 class Settings:
-    # --- LLM (any OpenAI-compatible gateway / model) -------------------------
-    llm_base_url: str | None = os.getenv("LLM_BASE_URL")  # e.g. https://<gateway>/v1
+    # --- LLM (any chat-completions endpoint / model) -------------------------
+    llm_base_url: str | None = os.getenv("LLM_BASE_URL")  # e.g. https://<host>/v1
     llm_api_key: str | None = os.getenv("LLM_API_KEY")
     llm_model: str | None = os.getenv("LLM_MODEL")
     temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.3"))

@@ -1,8 +1,8 @@
-"""Command-line interface: play against Claude, then rewind and analyze games.
+"""Command-line interface: play against the LLM, then rewind and analyze games.
 
-    python -m chess_llm.cli play              # play White vs Claude
+    python -m chess_llm.cli play              # play White vs the LLM
     python -m chess_llm.cli play --color black
-    python -m chess_llm.cli llm-vs-llm        # watch Claude play itself
+    python -m chess_llm.cli llm-vs-llm        # watch the LLM play itself
     python -m chess_llm.cli games             # list stored games
     python -m chess_llm.cli show 1            # move list for game 1
     python -m chess_llm.cli rewind 1 --ply 6  # board after 6 half-moves

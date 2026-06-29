@@ -1,14 +1,15 @@
-"""The LLM chess player — vendor-neutral.
+"""The LLM chess player — endpoint-neutral.
 
-Talks to any **OpenAI-compatible** chat-completions endpoint (OpenAI, Anthropic's
-compat API, and the many gateways/inference hosts that implement the same protocol).
-The vendor is pure configuration (`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`); there
-is no provider-specific code path here.
+Talks to any chat-completions HTTP endpoint via the widely-implemented JSON wire
+format (`POST {base_url}/chat/completions` with `messages` + `tools`). The endpoint is
+pure configuration (`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`); there is no
+endpoint-specific code here, and no third-party client SDK — just an HTTP call.
 
 It runs a tool-calling loop — `get_legal_moves` → reason → `make_move` — with the
 engine validating every move, and records each turn as a trace (request/response,
-tokens, latency) with one span per tool call. To support a non-OpenAI-shaped vendor,
-implement the `Player` protocol in a new module and return it from `make_player`.
+tokens, latency) with one span per tool call. To support an endpoint that does not
+speak this wire format, implement the `Player` protocol in a new module and return it
+from `make_player`.
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ from __future__ import annotations
 import json
 import time
 from typing import Optional, Protocol
+
+import httpx
 
 from .config import settings
 from .engine import ChessEngine
@@ -42,26 +45,39 @@ class Player(Protocol):
 def make_player(model: str | None = None) -> Player:
     """Return the configured LLM player. Swap this out (or branch on an env flag) to
     introduce an alternative adapter without touching the rest of the app."""
-    return OpenAICompatiblePlayer(model=model)
+    return ChatCompletionsPlayer(model=model)
 
 
 class LLMNotConfigured(RuntimeError):
     pass
 
 
-class OpenAICompatiblePlayer:
+class ChatCompletionsPlayer:
     def __init__(self, model: str | None = None):
         if not settings.llm_base_url or not (model or settings.llm_model):
             raise LLMNotConfigured(
                 "Set LLM_BASE_URL and LLM_MODEL (and usually LLM_API_KEY) — see .env.example."
             )
-        from openai import OpenAI
-
         self.model = model or settings.llm_model  # type: ignore[assignment]
-        self.client = OpenAI(
-            base_url=settings.llm_base_url,
-            api_key=settings.llm_api_key or "EMPTY",  # some local gateways need no key
-        )
+        self.base_url = settings.llm_base_url.rstrip("/")
+        self.api_key = settings.llm_api_key
+        self.http = httpx.Client(timeout=120.0)  # reasoning models can be slow
+
+    def _complete(self, messages: list[dict], tools: list[dict]) -> dict:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        body = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": "auto",
+            "max_tokens": settings.max_tokens,
+            "temperature": settings.temperature,
+        }
+        resp = self.http.post(f"{self.base_url}/chat/completions", json=body, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
 
     def choose_move(self, engine: ChessEngine, game_id: int) -> MoveChoice:
         prompt = position_prompt(engine)
@@ -92,7 +108,7 @@ class OpenAICompatiblePlayer:
             game_id=game_id,
             model=self.model,
             status=status,
-            request={"base_url": settings.llm_base_url, "system": SYSTEM_PROMPT, "prompt": prompt},
+            request={"base_url": self.base_url, "system": SYSTEM_PROMPT, "prompt": prompt},
             response={"chosen": chosen, "comment": comment, "thinking": "\n".join(turn.thinking)},
             error=error,
             input_tokens=turn.input_tokens,
@@ -118,48 +134,35 @@ class OpenAICompatiblePlayer:
         chosen = comment = None
         tools = tool_specs()
         for _ in range(settings.max_tool_iterations):
-            resp = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                max_tokens=settings.max_tokens,
-                temperature=settings.temperature,
-            )
-            if resp.usage:
-                turn.input_tokens += resp.usage.prompt_tokens or 0
-                turn.output_tokens += resp.usage.completion_tokens or 0
+            data = self._complete(messages, tools)
+            usage = data.get("usage") or {}
+            turn.input_tokens += usage.get("prompt_tokens") or 0
+            turn.output_tokens += usage.get("completion_tokens") or 0
 
-            msg = resp.choices[0].message
-            tool_calls = msg.tool_calls or []
+            msg = data["choices"][0]["message"]
+            tool_calls = msg.get("tool_calls") or []
 
             if not tool_calls:
-                if msg.content:
-                    turn.thinking.append(msg.content)
-                messages.append({"role": "assistant", "content": msg.content or ""})
+                if msg.get("content"):
+                    turn.thinking.append(msg["content"])
+                messages.append({"role": "assistant", "content": msg.get("content") or ""})
                 messages.append({"role": "user", "content": "Use the make_move tool to play exactly one legal move."})
                 continue
 
-            messages.append({
-                "role": "assistant",
-                "content": msg.content or "",
-                "tool_calls": [
-                    {"id": tc.id, "type": "function",
-                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                    for tc in tool_calls
-                ],
-            })
+            # Echo the assistant turn (with its tool_calls) back verbatim, then answer each call.
+            messages.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": tool_calls})
             for tc in tool_calls:
                 started = time.monotonic()
+                fn = tc.get("function", {})
                 try:
-                    args = json.loads(tc.function.arguments or "{}")
+                    args = json.loads(fn.get("arguments") or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                outcome = execute_tool(engine, tc.function.name, args)
-                turn.add_span(tc.function.name, tc.id, args, outcome, started)
+                outcome = execute_tool(engine, fn.get("name", ""), args)
+                turn.add_span(fn.get("name", ""), tc.get("id"), args, outcome, started)
                 if outcome.picked_uci is not None:
                     chosen, comment = outcome.picked_uci, outcome.comment
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(outcome.output)})
+                messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": json.dumps(outcome.output)})
 
             if chosen is not None:
                 break
