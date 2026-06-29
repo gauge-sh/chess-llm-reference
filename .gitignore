@@ -6,6 +6,10 @@ chess.db
 chess.db-journal
 logs/
 .pytest_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
 
 # frontend
 web/node_modules/

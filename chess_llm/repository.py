@@ -6,8 +6,7 @@ ORM directly.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from .db import Game, Move, get_session
 from .engine import AppliedMove
@@ -30,7 +29,7 @@ def record_move(
     game_id: int,
     applied: AppliedMove,
     player: str,
-    thinking: Optional[str] = None,
+    thinking: str | None = None,
 ) -> int:
     with get_session() as s:
         move = Move(
@@ -53,7 +52,7 @@ def record_move(
 
 
 def finish_game(
-    game_id: int, status: str, result: Optional[str], termination: Optional[str], pgn: str
+    game_id: int, status: str, result: str | None, termination: str | None, pgn: str
 ) -> None:
     with get_session() as s:
         game = s.get(Game, game_id)
@@ -63,14 +62,14 @@ def finish_game(
         game.result = result
         game.termination = termination
         game.pgn = pgn
-        game.completed_at = datetime.now(timezone.utc)
+        game.completed_at = datetime.now(UTC)
         s.commit()
 
 
 # --- read side ---------------------------------------------------------------
 
 
-def get_game(game_id: int) -> Optional[Game]:
+def get_game(game_id: int) -> Game | None:
     with get_session() as s:
         return s.get(Game, game_id)
 

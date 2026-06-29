@@ -8,7 +8,6 @@ no matter which endpoint or model is configured.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .engine import ChessEngine
 
@@ -48,8 +47,22 @@ def tool_specs() -> list[dict]:
     """Function/tool specs in the standard chat-completions shape understood by
     compatible endpoints."""
     return [
-        {"type": "function", "function": {"name": TOOL_GET_LEGAL_MOVES, "description": _GET_LEGAL_MOVES_DESC, "parameters": _EMPTY_PARAMS}},
-        {"type": "function", "function": {"name": TOOL_MAKE_MOVE, "description": _MAKE_MOVE_DESC, "parameters": _MAKE_MOVE_PARAMS}},
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_GET_LEGAL_MOVES,
+                "description": _GET_LEGAL_MOVES_DESC,
+                "parameters": _EMPTY_PARAMS,
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_MAKE_MOVE,
+                "description": _MAKE_MOVE_DESC,
+                "parameters": _MAKE_MOVE_PARAMS,
+            },
+        },
     ]
 
 
@@ -57,8 +70,8 @@ def tool_specs() -> list[dict]:
 class ToolOutcome:
     output: dict
     is_error: bool
-    picked_uci: Optional[str] = None
-    comment: Optional[str] = None
+    picked_uci: str | None = None
+    comment: str | None = None
 
 
 def execute_tool(engine: ChessEngine, name: str, tool_input: dict) -> ToolOutcome:
@@ -109,7 +122,7 @@ def position_prompt(engine: ChessEngine) -> str:
 class MoveChoice:
     uci: str
     thinking: str
-    comment: Optional[str]
+    comment: str | None
     fallback: bool  # True if the player (not the model) had to pick a legal move
     input_tokens: int
     output_tokens: int

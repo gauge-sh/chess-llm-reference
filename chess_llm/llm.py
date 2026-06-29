@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Optional, Protocol
+from typing import Protocol
 
 import httpx
 
@@ -86,41 +86,57 @@ class ChatCompletionsPlayer:
             {"role": "user", "content": prompt},
         ]
         turn = TurnTrace()
-        chosen: Optional[str] = None
-        comment: Optional[str] = None
+        chosen: str | None = None
+        comment: str | None = None
 
         t0 = time.monotonic()
-        status, error = "ok", None
+        status = "ok"
         try:
             chosen, comment = self._run_loop(engine, messages, turn)
         except Exception as exc:
-            status, error = "error", repr(exc)
-            log.warning("llm turn failed", extra={"context": {"game_id": game_id, "error": repr(exc)}})
+            status = "error"
+            log.warning(
+                "llm turn failed", extra={"context": {"game_id": game_id, "error": repr(exc)}}
+            )
 
         latency_ms = int((time.monotonic() - t0) * 1000)
         fallback = False
         if chosen is None:
             chosen = engine.legal_moves()[0].uci
             fallback = True
-            log.warning("falling back to first legal move", extra={"context": {"game_id": game_id, "uci": chosen}})
+            log.warning(
+                "falling back to first legal move",
+                extra={"context": {"game_id": game_id, "uci": chosen}},
+            )
 
         # Per-move detail is logged and returned on MoveChoice, not persisted. Hook
         # your own observability platform in here if you want spans exported.
         log.info(
             "llm move chosen",
-            extra={"context": {
-                "game_id": game_id, "model": self.model, "uci": chosen, "fallback": fallback,
-                "status": status, "input_tokens": turn.input_tokens,
-                "output_tokens": turn.output_tokens, "latency_ms": latency_ms,
-            }},
+            extra={
+                "context": {
+                    "game_id": game_id,
+                    "model": self.model,
+                    "uci": chosen,
+                    "fallback": fallback,
+                    "status": status,
+                    "input_tokens": turn.input_tokens,
+                    "output_tokens": turn.output_tokens,
+                    "latency_ms": latency_ms,
+                }
+            },
         )
         return MoveChoice(
-            uci=chosen, thinking="\n".join(turn.thinking), comment=comment,
-            fallback=fallback, input_tokens=turn.input_tokens, output_tokens=turn.output_tokens,
+            uci=chosen,
+            thinking="\n".join(turn.thinking),
+            comment=comment,
+            fallback=fallback,
+            input_tokens=turn.input_tokens,
+            output_tokens=turn.output_tokens,
             latency_ms=latency_ms,
         )
 
-    def _run_loop(self, engine, messages, turn) -> tuple[Optional[str], Optional[str]]:
+    def _run_loop(self, engine, messages, turn) -> tuple[str | None, str | None]:
         chosen = comment = None
         tools = tool_specs()
         for _ in range(settings.max_tool_iterations):
@@ -136,11 +152,18 @@ class ChatCompletionsPlayer:
                 if msg.get("content"):
                     turn.thinking.append(msg["content"])
                 messages.append({"role": "assistant", "content": msg.get("content") or ""})
-                messages.append({"role": "user", "content": "Use the make_move tool to play exactly one legal move."})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Use the make_move tool to play exactly one legal move.",
+                    }
+                )
                 continue
 
             # Echo the assistant turn (with its tool_calls) back verbatim, then answer each call.
-            messages.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": tool_calls})
+            messages.append(
+                {"role": "assistant", "content": msg.get("content") or "", "tool_calls": tool_calls}
+            )
             for tc in tool_calls:
                 fn = tc.get("function", {})
                 try:
@@ -150,7 +173,13 @@ class ChatCompletionsPlayer:
                 outcome = execute_tool(engine, fn.get("name", ""), args)
                 if outcome.picked_uci is not None:
                     chosen, comment = outcome.picked_uci, outcome.comment
-                messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": json.dumps(outcome.output)})
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.get("id"),
+                        "content": json.dumps(outcome.output),
+                    }
+                )
 
             if chosen is not None:
                 break

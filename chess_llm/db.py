@@ -10,8 +10,7 @@ Schema:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -34,7 +33,7 @@ from .config import settings
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
@@ -49,14 +48,14 @@ class Game(Base):
     black_player: Mapped[str] = mapped_column(String(64))
     # in_progress | white_win | black_win | draw | abandoned
     status: Mapped[str] = mapped_column(String(32), default="in_progress")
-    result: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # 1-0, 0-1, 1/2-1/2
-    termination: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    result: Mapped[str | None] = mapped_column(String(16), nullable=True)  # 1-0, 0-1, 1/2-1/2
+    termination: Mapped[str | None] = mapped_column(String(64), nullable=True)
     initial_fen: Mapped[str] = mapped_column(Text)
-    pgn: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pgn: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    moves: Mapped[list["Move"]] = relationship(
+    moves: Mapped[list[Move]] = relationship(
         back_populates="game", order_by="Move.ply", cascade="all, delete-orphan"
     )
 
@@ -76,10 +75,10 @@ class Move(Base):
     fen_after: Mapped[str] = mapped_column(Text)
     is_capture: Mapped[bool] = mapped_column(Boolean, default=False)
     is_check: Mapped[bool] = mapped_column(Boolean, default=False)
-    thinking: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    thinking: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
-    game: Mapped["Game"] = relationship(back_populates="moves")
+    game: Mapped[Game] = relationship(back_populates="moves")
 
 
 _engine = None

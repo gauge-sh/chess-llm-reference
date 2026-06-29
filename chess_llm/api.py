@@ -1,15 +1,12 @@
 """HTTP API over the game core (FastAPI).
 
 Stateless: every request rehydrates the game from the DB via ``GameSession.load`` and
-applies one move. This is the surface the Next.js frontend talks to; it is also a clean
-example of wrapping the vendor-neutral core in a web layer.
+applies one move. This is the surface the Next.js frontend talks to.
 
 Run:  uvicorn chess_llm.api:app --reload
 """
 
 from __future__ import annotations
-
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,7 +38,7 @@ def _startup() -> None:
 
 class NewGame(BaseModel):
     human_color: str = "white"  # "white" | "black" | "none" (LLM vs LLM)
-    model: Optional[str] = None
+    model: str | None = None
 
 
 class MoveBody(BaseModel):
@@ -74,8 +71,14 @@ def _state(session: GameSession) -> dict:
             for m in eng.legal_moves()
         ],
         "moves": [
-            {"ply": m.ply, "move_number": m.move_number, "color": m.color,
-             "san": m.san, "uci": m.uci, "player": m.player}
+            {
+                "ply": m.ply,
+                "move_number": m.move_number,
+                "color": m.color,
+                "san": m.san,
+                "uci": m.uci,
+                "player": m.player,
+            }
             for m in repository.get_moves(session.game_id)
         ],
     }
@@ -99,8 +102,14 @@ def health() -> dict:
 @app.get("/api/games")
 def list_games() -> list[dict]:
     return [
-        {"id": g.id, "white_player": g.white_player, "black_player": g.black_player,
-         "status": g.status, "result": g.result, "created_at": g.created_at.isoformat()}
+        {
+            "id": g.id,
+            "white_player": g.white_player,
+            "black_player": g.black_player,
+            "status": g.status,
+            "result": g.result,
+            "created_at": g.created_at.isoformat(),
+        }
         for g in repository.list_games()
     ]
 
@@ -133,7 +142,7 @@ def play_move(game_id: int, body: MoveBody) -> dict:
     try:
         session.play_human_move(body.move)
     except ValueError as exc:
-        raise HTTPException(422, str(exc))
+        raise HTTPException(422, str(exc)) from exc
     session.maybe_finish()
     return _state(session)
 
@@ -145,7 +154,7 @@ def llm_move(game_id: int, body: NewGame | None = None) -> dict:
     try:
         llm = make_player(model=body.model if body else None)
     except LLMNotConfigured as exc:
-        raise HTTPException(503, str(exc))
+        raise HTTPException(503, str(exc)) from exc
 
     session = _load_or_404(game_id, llm=llm)
     if session.engine.outcome().over:
@@ -157,9 +166,13 @@ def llm_move(game_id: int, body: NewGame | None = None) -> dict:
     session.maybe_finish()
     state = _state(session)
     state["last_llm_move"] = {
-        "san": applied.san, "uci": applied.uci, "comment": choice.comment,
-        "fallback": choice.fallback, "input_tokens": choice.input_tokens,
-        "output_tokens": choice.output_tokens, "latency_ms": choice.latency_ms,
+        "san": applied.san,
+        "uci": applied.uci,
+        "comment": choice.comment,
+        "fallback": choice.fallback,
+        "input_tokens": choice.input_tokens,
+        "output_tokens": choice.output_tokens,
+        "latency_ms": choice.latency_ms,
     }
     return state
 

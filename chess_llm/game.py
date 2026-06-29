@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
-from .llm import Player
-from .engine import ChessEngine
-from .logging_setup import get_logger
 from . import repository
+from .engine import ChessEngine
+from .llm import Player
+from .logging_setup import get_logger
 
 log = get_logger("game")
 
@@ -21,10 +20,10 @@ class GameSession:
     engine: ChessEngine
     white_player: str
     black_player: str
-    llm: Optional[Player] = None
+    llm: Player | None = None
 
     @classmethod
-    def new(cls, white_player: str, black_player: str, llm: Optional[Player] = None) -> "GameSession":
+    def new(cls, white_player: str, black_player: str, llm: Player | None = None) -> GameSession:
         engine = ChessEngine()
         game_id = repository.create_game(white_player, black_player, engine.fen)
         log.info(
@@ -34,7 +33,7 @@ class GameSession:
         return cls(game_id, engine, white_player, black_player, llm)
 
     @classmethod
-    def load(cls, game_id: int, llm: Optional[Player] = None) -> Optional["GameSession"]:
+    def load(cls, game_id: int, llm: Player | None = None) -> GameSession | None:
         """Rehydrate an existing game from the DB (engine state from the last move's FEN)."""
         game = repository.get_game(game_id)
         if game is None:
@@ -48,7 +47,7 @@ class GameSession:
         return self.white_player if self.engine.turn == "white" else self.black_player
 
     @property
-    def human_color(self) -> Optional[str]:
+    def human_color(self) -> str | None:
         if self.white_player == HUMAN:
             return "white"
         if self.black_player == HUMAN:

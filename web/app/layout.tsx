@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Chess vs. LLM",
-  description: "A vendor-neutral full-stack reference: chess engine, LLM opponent, observability.",
+  description: "Play chess against an LLM, with games stored for rewind and analysis.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,7 +14,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="container">
           <header style={{ marginBottom: 20 }}>
             <Link href="/"><strong>♞ Chess vs. LLM</strong></Link>
-            <span className="muted"> — reference building block</span>
           </header>
           {children}
         </div>

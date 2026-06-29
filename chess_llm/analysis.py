@@ -1,14 +1,13 @@
 """Rewind and performance analysis over stored games.
 
 Because every move stores the FEN before and after it, we can rewind to any ply
-without re-deriving state, and compute simple performance metrics (material balance,
-captures, checks, plus the LLM's per-move token/latency cost) straight from the DB.
+without re-deriving state, and compute simple metrics (material balance, captures,
+checks) straight from the DB.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import chess
 
@@ -28,11 +27,11 @@ PIECE_VALUES = {
 class PositionAtPly:
     ply: int
     fen: str
-    last_move_san: Optional[str]
+    last_move_san: str | None
     ascii_board: str
 
 
-def position_at_ply(game_id: int, ply: int) -> Optional[PositionAtPly]:
+def position_at_ply(game_id: int, ply: int) -> PositionAtPly | None:
     """Return the board state after ``ply`` half-moves (ply=0 is the start)."""
     moves = repository.get_moves(game_id)
     game = repository.get_game(game_id)
@@ -85,7 +84,7 @@ def material_timeline(game_id: int) -> list[dict]:
     return timeline
 
 
-def game_summary(game_id: int) -> Optional[dict]:
+def game_summary(game_id: int) -> dict | None:
     """Per-game and per-player performance metrics."""
     game = repository.get_game(game_id)
     if game is None:
@@ -101,7 +100,9 @@ def game_summary(game_id: int) -> Optional[dict]:
             "checks_given": sum(1 for m in side_moves if m.is_check),
         }
 
-    final_white, final_black = (_material(moves[-1].fen_after) if moves else _material(game.initial_fen))
+    final_white, final_black = (
+        _material(moves[-1].fen_after) if moves else _material(game.initial_fen)
+    )
 
     return {
         "game_id": game.id,
@@ -111,5 +112,9 @@ def game_summary(game_id: int) -> Optional[dict]:
         "total_plies": len(moves),
         "white": player_stats("white"),
         "black": player_stats("black"),
-        "final_material": {"white": final_white, "black": final_black, "balance": final_white - final_black},
+        "final_material": {
+            "white": final_white,
+            "black": final_black,
+            "balance": final_white - final_black,
+        },
     }

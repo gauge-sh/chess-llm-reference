@@ -1,101 +1,112 @@
-# chess-llm-reference
+# Chess vs. LLM
 
-Play chess against an LLM (or watch it play itself), with every game, move, and LLM
-turn stored so you can rewind and inspect them. Python core + FastAPI + a small Next.js
-board UI.
+Play chess against an LLM (or watch it play itself). Games and moves are persisted so
+positions can be rewound and analyzed. Python core + FastAPI backend + a Next.js board
+UI.
 
-**WIP.** The core loop works end to end; lots of edges are still rough (see
-[Status](#status)). Pick it up and keep going.
+Status: early, under active development. The core loop is working end to end; the
+[roadmap](#roadmap) tracks what's left.
 
-## Run it
+## Stack
 
-Backend:
+- **Core / API** — Python 3.11+, `python-chess` for rules, SQLAlchemy, FastAPI.
+- **LLM** — any chat-completions HTTP endpoint (configured by env; no SDK lock-in).
+- **Frontend** — Next.js (App Router) with a hand-rolled board.
+- **Storage** — SQLite by default; any SQLAlchemy-supported Postgres via `DATABASE_URL`.
+
+## Getting started
+
+Prerequisites: Python 3.11+, Node 20+.
 
 ```bash
-python3 -m venv .venv
-./.venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && source .venv/bin/activate
+make install                  # pip install -e ".[dev]"
 cp .env.example .env          # set LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
-./.venv/bin/uvicorn chess_llm.api:app --reload --port 8000
+make dev                      # API on :8000
 ```
 
-Frontend:
+Frontend (separate shell):
 
 ```bash
-cd web
-npm install
-cp .env.local.example .env.local
-npm run dev                   # http://localhost:3000
+make web                      # installs deps + runs Next.js on :3000
 ```
 
-Or skip the UI and use the CLI:
+`make` targets: `install`, `dev`, `web`, `test`, `lint`, `fmt`.
+
+### CLI
+
+The terminal client covers everything the UI does, plus inspection:
 
 ```bash
-./.venv/bin/python -m chess_llm.cli play          # play in the terminal
-./.venv/bin/python -m chess_llm.cli llm-vs-llm    # watch it play itself
-./.venv/bin/python -m chess_llm.cli games         # list games
-./.venv/bin/python -m chess_llm.cli show 1
-./.venv/bin/python -m chess_llm.cli rewind 1 --ply 6
-./.venv/bin/python -m chess_llm.cli analyze 1
+chess-llm play                # play a game in the terminal
+chess-llm llm-vs-llm          # watch the model play itself
+chess-llm games               # list games
+chess-llm show 1              # move list
+chess-llm rewind 1 --ply 6    # board after N half-moves
+chess-llm analyze 1           # per-game / per-player metrics
 ```
 
-## Config
+## Configuration
 
-Two things, both env:
+All via env (`.env` is loaded automatically):
 
-- **LLM** — `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`. Any endpoint that speaks the
-  standard chat-completions JSON protocol. The API boots without it; LLM moves just
-  return 503 until it's set.
-- **Database** — `DATABASE_URL` (any SQLAlchemy URL). Defaults to local SQLite. For
-  Postgres, uncomment `psycopg[binary]` in `requirements.txt` and use a
-  `postgresql+psycopg://…` URL.
+- **LLM** — `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`. Any endpoint speaking the
+  standard chat-completions JSON protocol. The API runs without it; LLM moves return
+  503 until it's set.
+- **Database** — `DATABASE_URL`, any SQLAlchemy URL. Defaults to local SQLite. For
+  Postgres: `pip install -e ".[postgres]"` and set a `postgresql+psycopg://…` URL
+  (`pool_pre_ping` is on, so serverless instances that drop idle connections are fine).
+- **CORS** — `CORS_ORIGINS` (comma-separated), defaults to `http://localhost:3000`.
 
-## Layout
+## Project layout
 
 ```
 chess_llm/
   engine.py       chess rules (python-chess): legal moves, apply, end detection
-  llm.py          the LLM player — chat-completions tool-call loop over raw HTTP
-  tools.py        the two tools (get_legal_moves / make_move) + prompts, vendor-neutral
+  llm.py          LLM player — chat-completions tool-call loop over plain HTTP
+  tools.py        the two tools (get_legal_moves / make_move) + prompts
   game.py         orchestration: load/apply a move, persist, detect game over
-  repository.py   all DB reads/writes
+  repository.py   DB reads/writes
   db.py           SQLAlchemy models + engine/session
   analysis.py     rewind to any ply + per-game/player metrics
   api.py          FastAPI HTTP layer
   cli.py          terminal client
-web/              Next.js board UI (hand-rolled board, click-to-move)
+web/              Next.js board UI
 tests/            engine + persistence tests
 ```
 
-Data model: `games → moves`, where each move stores the FEN before/after so rewind is
-just a lookup. There are intentionally no LLM-observability tables — per-move detail is
-logged and returned from the API, so you can wire in whatever tracing platform you want
-later without ripping out a baked-in one.
+## Architecture
 
-## Status
+- The engine is the only authority on legality. The LLM's `make_move` tool *proposes* a
+  UCI; `game.py` is the single place that validates, applies, and persists it.
+- The API is stateless — each request rehydrates the game from the DB (engine state is
+  reconstructed from the last move's FEN).
+- Data model is `games → moves`; each move stores the FEN before/after, so rewind is a
+  lookup. There are deliberately no LLM-observability tables — per-move detail (tokens,
+  latency, chosen move) is logged and returned from the API so a tracing platform can be
+  added later without removing a baked-in one.
 
-Works:
+## Roadmap
 
-- Human vs LLM and LLM vs LLM, both CLI and web.
-- Moves persisted; rewind and `analyze` read back fine.
-- LLM drives the game through tool calls; engine validates every move; illegal moves
-  bounce back and it retries.
+Near-term:
 
-Rough / not done yet:
+- [ ] Make `/llm-move` non-blocking (streaming or a job/poll model) — it currently holds
+      the request for the whole turn, which is slow with reasoning models.
+- [ ] Surface `analyze` data in the web UI (endpoint + CLI already exist).
+- [ ] Pawn-promotion picker in the board UI (currently auto-queens).
+- [ ] API/adapter tests (only engine + persistence are covered today).
 
-- **`/llm-move` is synchronous** — blocks for the whole turn (20s+ on reasoning
-  models). Needs streaming or a job/poll model before it's pleasant in the UI.
-- **No API/adapter tests** — only the engine and persistence are covered.
-- **Frontend gaps**: pawn promotion auto-queens (no picker); no board-flip; the
-  `analyze` data isn't surfaced in the UI yet (endpoint + CLI exist).
-- **No auth / multi-user** — games are global; `repository` would need per-user scoping.
-- **Schema is `create_all` on startup** — no migrations.
-- **Fallback is crude** — on an LLM/API error it just plays the first legal move and
-  flags the turn; fine for not crashing, not for quality.
-- `analyze` is material-only (piece counts), not a real position evaluation.
+Later:
 
-## Notes for whoever continues this
+- [ ] Move off `create_all` to managed migrations.
+- [ ] Per-user scoping + auth (games are currently global).
+- [ ] Replace the material-count `analyze` with real position evaluation.
+- [ ] Board-flip / orientation controls in the UI.
 
-- The LLM is a swappable adapter: implement the `Player` protocol (`choose_move →
-  MoveChoice`) in a new module, reuse `tools.execute_tool` so the engine still
-  validates, and return it from `make_player`. Nothing else should need to change.
-- Tests run without any API key: `./.venv/bin/python -m pytest -q`.
+## Development
+
+- `make test` runs the suite (no API key needed).
+- `make lint` / `make fmt` run Ruff over the backend.
+- To add a different LLM backend, implement the `Player` protocol (`choose_move →
+  MoveChoice`) in a new module, reuse `tools.execute_tool` so the engine still validates,
+  and return it from `make_player`.

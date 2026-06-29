@@ -1,12 +1,12 @@
 """Command-line interface: play against the LLM, then rewind and analyze games.
 
-    python -m chess_llm.cli play              # play White vs the LLM
-    python -m chess_llm.cli play --color black
-    python -m chess_llm.cli llm-vs-llm        # watch the LLM play itself
-    python -m chess_llm.cli games             # list stored games
-    python -m chess_llm.cli show 1            # move list for game 1
-    python -m chess_llm.cli rewind 1 --ply 6  # board after 6 half-moves
-    python -m chess_llm.cli analyze 1         # per-game / per-player metrics
+python -m chess_llm.cli play              # play White vs the LLM
+python -m chess_llm.cli play --color black
+python -m chess_llm.cli llm-vs-llm        # watch the LLM play itself
+python -m chess_llm.cli games             # list stored games
+python -m chess_llm.cli show 1            # move list for game 1
+python -m chess_llm.cli rewind 1 --ply 6  # board after 6 half-moves
+python -m chess_llm.cli analyze 1         # per-game / per-player metrics
 """
 
 from __future__ import annotations
@@ -15,11 +15,10 @@ import json
 
 import click
 
-from .llm import make_player
-from .config import settings
+from . import analysis, repository
 from .db import init_db
 from .game import GameSession
-from . import analysis, repository
+from .llm import make_player
 
 
 def _print_board(session: GameSession) -> None:
@@ -36,7 +35,9 @@ def _announce_result(session: GameSession) -> None:
         fg="green",
         bold=True,
     )
-    click.echo(f"Game id {session.game_id}. Analyze with: python -m chess_llm.cli analyze {session.game_id}")
+    click.echo(
+        f"Game id {session.game_id}. Analyze with: python -m chess_llm.cli analyze {session.game_id}"
+    )
 
 
 @click.group()
@@ -46,8 +47,12 @@ def cli() -> None:
 
 
 @cli.command()
-@click.option("--color", type=click.Choice(["white", "black"]), default="white",
-              help="The colour YOU play. The LLM takes the other side.")
+@click.option(
+    "--color",
+    type=click.Choice(["white", "black"]),
+    default="white",
+    help="The colour YOU play. The LLM takes the other side.",
+)
 @click.option("--model", default=None, help="Override LLM_MODEL for this game.")
 def play(color: str, model: str | None) -> None:
     """Play a game against the configured LLM in the terminal."""
@@ -58,7 +63,10 @@ def play(color: str, model: str | None) -> None:
     else:
         session = GameSession.new(llm_label, human_label, llm=llm)
 
-    click.secho(f"You are {color.upper()} vs {llm.model}. Enter moves as UCI (e2e4) or SAN (Nf3).", fg="cyan")  # noqa: E501
+    click.secho(
+        f"You are {color.upper()} vs {llm.model}. Enter moves as UCI (e2e4) or SAN (Nf3).",
+        fg="cyan",
+    )  # noqa: E501
     click.echo("Commands: 'moves' to list legal moves, 'resign' to quit.")
 
     while True:
@@ -147,7 +155,10 @@ def rewind(game_id: int, ply: int) -> None:
     if pos is None:
         click.echo("No such game.")
         return
-    click.echo(f"Position after ply {pos.ply}" + (f" ({pos.last_move_san})" if pos.last_move_san else " (start)"))
+    click.echo(
+        f"Position after ply {pos.ply}"
+        + (f" ({pos.last_move_san})" if pos.last_move_san else " (start)")
+    )
     click.echo()
     click.echo(pos.ascii_board)
     click.echo(f"\nFEN: {pos.fen}")

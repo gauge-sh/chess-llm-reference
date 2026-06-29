@@ -7,7 +7,6 @@ Everything else (persistence, the LLM, the CLI) talks to the board through here.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import chess
 import chess.pgn
@@ -37,15 +36,15 @@ class AppliedMove:
 @dataclass
 class GameOutcome:
     over: bool
-    result: Optional[str]  # "1-0" | "0-1" | "1/2-1/2" | None
-    status: Optional[str]  # "white_win" | "black_win" | "draw" | None
-    termination: Optional[str]  # e.g. "checkmate", "stalemate", "insufficient_material"
+    result: str | None  # "1-0" | "0-1" | "1/2-1/2" | None
+    status: str | None  # "white_win" | "black_win" | "draw" | None
+    termination: str | None  # e.g. "checkmate", "stalemate", "insufficient_material"
 
 
 class ChessEngine:
     """Stateful wrapper around a single ``chess.Board``."""
 
-    def __init__(self, fen: Optional[str] = None):
+    def __init__(self, fen: str | None = None):
         self.board = chess.Board(fen) if fen else chess.Board()
 
     # --- introspection -------------------------------------------------------
@@ -85,7 +84,7 @@ class ChessEngine:
 
     # --- mutation ------------------------------------------------------------
 
-    def parse_move(self, move_str: str) -> Optional[chess.Move]:
+    def parse_move(self, move_str: str) -> chess.Move | None:
         """Accept either UCI (e2e4) or SAN (Nf3); return None if illegal/unparsable."""
         move_str = move_str.strip()
         # Try UCI first.
@@ -98,7 +97,12 @@ class ChessEngine:
         # Fall back to SAN.
         try:
             return self.board.parse_san(move_str)
-        except (ValueError, chess.InvalidMoveError, chess.IllegalMoveError, chess.AmbiguousMoveError):
+        except (
+            ValueError,
+            chess.InvalidMoveError,
+            chess.IllegalMoveError,
+            chess.AmbiguousMoveError,
+        ):
             return None
 
     def apply(self, move_str: str) -> AppliedMove:
@@ -145,7 +149,7 @@ class ChessEngine:
             termination=oc.termination.name.lower(),
         )
 
-    def to_pgn(self, white: str, black: str, result: Optional[str]) -> str:
+    def to_pgn(self, white: str, black: str, result: str | None) -> str:
         """Reconstruct a PGN from the move stack."""
         game = chess.pgn.Game()
         game.headers["White"] = white
