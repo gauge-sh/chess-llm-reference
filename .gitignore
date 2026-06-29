@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+chess.db
+chess.db-journal
+logs/
+.pytest_cache/
+
+# frontend
+web/node_modules/
+web/.next/
+web/out/
+web/.env.local

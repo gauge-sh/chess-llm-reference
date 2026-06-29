@@ -1,0 +1,17 @@
+# Core
+chess>=1.11
+SQLAlchemy>=2.0
+python-dotenv>=1.0
+click>=8.1
+
+# LLM — any OpenAI-compatible gateway (the openai SDK is just the protocol client)
+openai>=1.40
+
+# Web API
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# Database drivers: SQLite ships with Python. Uncomment for hosted Postgres
+# (Supabase, Neon, RDS, Cloud SQL, ...). psycopg (v3) is the SQLAlchemy default for
+# postgresql:// URLs; use postgresql+psycopg://... in DATABASE_URL.
+psycopg[binary]>=3.1
