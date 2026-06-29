@@ -50,6 +50,12 @@ Two things, both env:
   Postgres, uncomment `psycopg[binary]` in `requirements.txt` and use a
   `postgresql+psycopg://…` URL.
 
+## Telemetry
+
+None by default. No OpenTelemetry, no external exporters — the LLM "traces" are just
+rows in the local DB for rewind/analysis and never leave the machine. Next.js's own
+anonymous telemetry is disabled in the npm scripts (`NEXT_TELEMETRY_DISABLED=1`).
+
 ## Layout
 
 ```
