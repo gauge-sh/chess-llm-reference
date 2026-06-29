@@ -91,7 +91,6 @@ def game_summary(game_id: int) -> Optional[dict]:
     if game is None:
         return None
     moves = repository.get_moves(game_id)
-    traces = repository.get_traces(game_id)
 
     def player_stats(color: str) -> dict:
         side_moves = [m for m in moves if m.color == color]
@@ -104,18 +103,6 @@ def game_summary(game_id: int) -> Optional[dict]:
 
     final_white, final_black = (_material(moves[-1].fen_after) if moves else _material(game.initial_fen))
 
-    llm_traces = [t for t in traces if t.kind == "llm_turn"]
-    llm_input = sum(t.input_tokens for t in llm_traces)
-    llm_output = sum(t.output_tokens for t in llm_traces)
-    fallbacks = sum(1 for t in llm_traces if t.status != "ok")
-    avg_latency = (
-        round(sum(t.latency_ms for t in llm_traces) / len(llm_traces)) if llm_traces else 0
-    )
-    total_tool_calls = sum(len(t.spans) for t in llm_traces)
-    illegal_attempts = sum(
-        1 for t in llm_traces for sp in t.spans if sp.tool_name == "make_move" and sp.is_error
-    )
-
     return {
         "game_id": game.id,
         "status": game.status,
@@ -125,13 +112,4 @@ def game_summary(game_id: int) -> Optional[dict]:
         "white": player_stats("white"),
         "black": player_stats("black"),
         "final_material": {"white": final_white, "black": final_black, "balance": final_white - final_black},
-        "llm": {
-            "turns": len(llm_traces),
-            "input_tokens": llm_input,
-            "output_tokens": llm_output,
-            "avg_latency_ms": avg_latency,
-            "total_tool_calls": total_tool_calls,
-            "illegal_move_attempts": illegal_attempts,
-            "failed_turns": fallbacks,
-        },
     }

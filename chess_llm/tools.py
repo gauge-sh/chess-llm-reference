@@ -2,14 +2,13 @@
 
 The LLM player is given two tools (``get_legal_moves`` / ``make_move``) and executes
 them through :func:`execute_tool`, so the engine stays the single authority on legality
-and the trace/span shape is identical no matter which gateway or model is configured.
+no matter which endpoint or model is configured.
 """
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Optional
 
 from .engine import ChessEngine
 
@@ -111,7 +110,6 @@ class MoveChoice:
     uci: str
     thinking: str
     comment: Optional[str]
-    trace_id: int
     fallback: bool  # True if the player (not the model) had to pick a legal move
     input_tokens: int
     output_tokens: int
@@ -120,21 +118,13 @@ class MoveChoice:
 
 @dataclass
 class TurnTrace:
-    """Accumulates spans + usage for one turn as the tool loop runs."""
+    """Accumulates token usage + reasoning text for one turn as the tool loop runs.
 
-    spans: list[dict] = field(default_factory=list)
+    In-memory only — nothing here is persisted. It feeds the returned MoveChoice and
+    the JSON logs; plug your own observability platform into the LLM player if you
+    want spans/traces exported somewhere.
+    """
+
     thinking: list[str] = field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
-
-    def add_span(self, name: str, tool_use_id: Optional[str], tool_input: Any, outcome: ToolOutcome, started: float) -> None:
-        self.spans.append(
-            {
-                "tool_name": name,
-                "tool_use_id": tool_use_id,
-                "tool_input": tool_input,
-                "tool_output": outcome.output,
-                "is_error": outcome.is_error,
-                "latency_ms": int((time.monotonic() - started) * 1000),
-            }
-        )

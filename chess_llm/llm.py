@@ -6,10 +6,11 @@ pure configuration (`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`); there is no
 endpoint-specific code here, and no third-party client SDK — just an HTTP call.
 
 It runs a tool-calling loop — `get_legal_moves` → reason → `make_move` — with the
-engine validating every move, and records each turn as a trace (request/response,
-tokens, latency) with one span per tool call. To support an endpoint that does not
-speak this wire format, implement the `Player` protocol in a new module and return it
-from `make_player`.
+engine validating every move. Per-move detail (tokens, latency, the chosen move) is
+returned on `MoveChoice` and written to the JSON logs, but nothing is persisted to a
+trace store — wire your own LLM-observability platform in here if you want one. To
+support an endpoint that doesn't speak this wire format, implement the `Player`
+protocol in a new module and return it from `make_player`.
 """
 
 from __future__ import annotations
@@ -31,7 +32,6 @@ from .tools import (
     position_prompt,
     tool_specs,
 )
-from . import repository
 
 log = get_logger("llm")
 
@@ -104,28 +104,18 @@ class ChatCompletionsPlayer:
             fallback = True
             log.warning("falling back to first legal move", extra={"context": {"game_id": game_id, "uci": chosen}})
 
-        trace_id = repository.record_trace(
-            game_id=game_id,
-            model=self.model,
-            status=status,
-            request={"base_url": self.base_url, "system": SYSTEM_PROMPT, "prompt": prompt},
-            response={"chosen": chosen, "comment": comment, "thinking": "\n".join(turn.thinking)},
-            error=error,
-            input_tokens=turn.input_tokens,
-            output_tokens=turn.output_tokens,
-            latency_ms=latency_ms,
-            spans=turn.spans,
-        )
+        # Per-move detail is logged and returned on MoveChoice, not persisted. Hook
+        # your own observability platform in here if you want spans exported.
         log.info(
             "llm move chosen",
             extra={"context": {
                 "game_id": game_id, "model": self.model, "uci": chosen, "fallback": fallback,
-                "input_tokens": turn.input_tokens, "output_tokens": turn.output_tokens,
-                "latency_ms": latency_ms, "tool_calls": len(turn.spans),
+                "status": status, "input_tokens": turn.input_tokens,
+                "output_tokens": turn.output_tokens, "latency_ms": latency_ms,
             }},
         )
         return MoveChoice(
-            uci=chosen, thinking="\n".join(turn.thinking), comment=comment, trace_id=trace_id,
+            uci=chosen, thinking="\n".join(turn.thinking), comment=comment,
             fallback=fallback, input_tokens=turn.input_tokens, output_tokens=turn.output_tokens,
             latency_ms=latency_ms,
         )
@@ -152,14 +142,12 @@ class ChatCompletionsPlayer:
             # Echo the assistant turn (with its tool_calls) back verbatim, then answer each call.
             messages.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": tool_calls})
             for tc in tool_calls:
-                started = time.monotonic()
                 fn = tc.get("function", {})
                 try:
                     args = json.loads(fn.get("arguments") or "{}")
                 except json.JSONDecodeError:
                     args = {}
                 outcome = execute_tool(engine, fn.get("name", ""), args)
-                turn.add_span(fn.get("name", ""), tc.get("id"), args, outcome, started)
                 if outcome.picked_uci is not None:
                     chosen, comment = outcome.picked_uci, outcome.comment
                 messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": json.dumps(outcome.output)})

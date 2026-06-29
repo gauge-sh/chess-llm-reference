@@ -27,7 +27,6 @@ export interface LastLLMMove {
   input_tokens: number;
   output_tokens: number;
   latency_ms: number;
-  trace_id: number;
 }
 
 export interface GameState {
@@ -87,5 +86,4 @@ export const api = {
     req<GameState>(`/api/games/${id}/moves`, { method: "POST", body: JSON.stringify({ move }) }),
   llmMove: (id: number) => req<GameState>(`/api/games/${id}/llm-move`, { method: "POST", body: "{}" }),
   analysis: (id: number) => req<any>(`/api/games/${id}/analysis`),
-  traces: (id: number) => req<any[]>(`/api/games/${id}/traces`),
 };

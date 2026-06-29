@@ -32,36 +32,12 @@ def test_rewind_to_ply():
     assert " w " in after_two.fen
 
 
-def test_trace_with_spans_round_trip():
-    game_id = _play_game()
-    trace_id = repository.record_trace(
-        game_id=game_id,
-        model="test-model",
-        input_tokens=120,
-        output_tokens=30,
-        latency_ms=900,
-        spans=[
-            {"tool_name": "get_legal_moves", "tool_use_id": "t1", "tool_input": {}, "tool_output": {"n": 20}},
-            {"tool_name": "make_move", "tool_use_id": "t2", "tool_input": {"uci": "e2e4"}, "tool_output": {"ok": True}},
-        ],
-    )
-    traces = repository.get_traces(game_id)
-    assert any(t.id == trace_id for t in traces)
-    t = next(t for t in traces if t.id == trace_id)
-    assert [sp.tool_name for sp in t.spans] == ["get_legal_moves", "make_move"]
-
-
 def test_game_summary_metrics():
     game_id = _play_game()
-    repository.record_trace(
-        game_id=game_id, model="test-model", input_tokens=100, output_tokens=20, latency_ms=500,
-        spans=[{"tool_name": "make_move", "tool_input": {"uci": "zz"}, "tool_output": {"ok": False}, "is_error": True},
-               {"tool_name": "make_move", "tool_input": {"uci": "e7e5"}, "tool_output": {"ok": True}}],
-    )
     summary = analysis.game_summary(game_id)
     assert summary is not None
     assert summary["total_plies"] == 4
     assert summary["white"]["moves"] == 2
     assert summary["black"]["moves"] == 2
-    assert summary["llm"]["illegal_move_attempts"] == 1
-    assert summary["llm"]["input_tokens"] == 100
+    assert summary["final_material"]["balance"] == 0  # symmetric opening
+    assert "llm" not in summary  # no LLM-observability data baked in

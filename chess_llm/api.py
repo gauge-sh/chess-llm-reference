@@ -160,24 +160,8 @@ def llm_move(game_id: int, body: NewGame | None = None) -> dict:
         "san": applied.san, "uci": applied.uci, "comment": choice.comment,
         "fallback": choice.fallback, "input_tokens": choice.input_tokens,
         "output_tokens": choice.output_tokens, "latency_ms": choice.latency_ms,
-        "trace_id": choice.trace_id,
     }
     return state
-
-
-@app.get("/api/games/{game_id}/traces")
-def get_traces(game_id: int) -> list[dict]:
-    return [
-        {"id": t.id, "move_id": t.move_id, "model": t.model, "status": t.status,
-         "input_tokens": t.input_tokens, "output_tokens": t.output_tokens,
-         "latency_ms": t.latency_ms,
-         "spans": [
-             {"tool_name": s.tool_name, "tool_input": s.tool_input,
-              "tool_output": s.tool_output, "is_error": s.is_error, "latency_ms": s.latency_ms}
-             for s in t.spans
-         ]}
-        for t in repository.get_traces(game_id)
-    ]
 
 
 @app.get("/api/games/{game_id}/analysis")

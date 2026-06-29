@@ -36,7 +36,6 @@ Or skip the UI and use the CLI:
 ./.venv/bin/python -m chess_llm.cli show 1
 ./.venv/bin/python -m chess_llm.cli rewind 1 --ply 6
 ./.venv/bin/python -m chess_llm.cli analyze 1
-./.venv/bin/python -m chess_llm.cli traces 1
 ```
 
 ## Config
@@ -49,12 +48,6 @@ Two things, both env:
 - **Database** — `DATABASE_URL` (any SQLAlchemy URL). Defaults to local SQLite. For
   Postgres, uncomment `psycopg[binary]` in `requirements.txt` and use a
   `postgresql+psycopg://…` URL.
-
-## Telemetry
-
-None by default. No OpenTelemetry, no external exporters — the LLM "traces" are just
-rows in the local DB for rewind/analysis and never leave the machine. Next.js's own
-anonymous telemetry is disabled in the npm scripts (`NEXT_TELEMETRY_DISABLED=1`).
 
 ## Layout
 
@@ -73,16 +66,17 @@ web/              Next.js board UI (hand-rolled board, click-to-move)
 tests/            engine + persistence tests
 ```
 
-Data model: `games → moves` (each move stores FEN before/after, so rewind is just a
-lookup) and `games → traces → spans` (one trace per LLM turn, one span per tool call,
-linked to the move it produced).
+Data model: `games → moves`, where each move stores the FEN before/after so rewind is
+just a lookup. There are intentionally no LLM-observability tables — per-move detail is
+logged and returned from the API, so you can wire in whatever tracing platform you want
+later without ripping out a baked-in one.
 
 ## Status
 
 Works:
 
 - Human vs LLM and LLM vs LLM, both CLI and web.
-- Moves + LLM traces persisted; rewind and `analyze`/`traces` read back fine.
+- Moves persisted; rewind and `analyze` read back fine.
 - LLM drives the game through tool calls; engine validates every move; illegal moves
   bounce back and it retries.
 
@@ -91,8 +85,8 @@ Rough / not done yet:
 - **`/llm-move` is synchronous** — blocks for the whole turn (20s+ on reasoning
   models). Needs streaming or a job/poll model before it's pleasant in the UI.
 - **No API/adapter tests** — only the engine and persistence are covered.
-- **Frontend gaps**: pawn promotion auto-queens (no picker); no board-flip; traces and
-  analysis aren't surfaced in the UI yet (endpoints exist, CLI shows them).
+- **Frontend gaps**: pawn promotion auto-queens (no picker); no board-flip; the
+  `analyze` data isn't surfaced in the UI yet (endpoint + CLI exist).
 - **No auth / multi-user** — games are global; `repository` would need per-user scoping.
 - **Schema is `create_all` on startup** — no migrations.
 - **Fallback is crude** — on an LLM/API error it just plays the first legal move and

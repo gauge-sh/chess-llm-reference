@@ -65,14 +65,13 @@ class GameSession:
         repository.record_move(self.game_id, applied, player=HUMAN)
 
     def play_llm_move(self):
-        """Ask the LLM for a move, apply it, and link the trace to the move row."""
+        """Ask the LLM for a move, apply it, and persist it."""
         assert self.llm is not None, "no LLM player configured"
         choice = self.llm.choose_move(self.engine, self.game_id)
         applied = self.engine.apply(choice.uci)
-        move_id = repository.record_move(
+        repository.record_move(
             self.game_id, applied, player=self.llm.model, thinking=choice.thinking
         )
-        repository.link_trace_to_move(choice.trace_id, move_id)
         return applied, choice
 
     def maybe_finish(self) -> bool:

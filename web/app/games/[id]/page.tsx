@@ -85,7 +85,7 @@ export default function GamePage({ params }: { params: { id: string } }) {
               {last.fallback && <span className="badge" style={{ marginLeft: 8 }}>fallback</span>}
               {last.comment && <p className="muted" style={{ margin: "6px 0 0" }}>{last.comment}</p>}
               <p className="muted" style={{ margin: "8px 0 0", fontSize: 13 }}>
-                {last.input_tokens}+{last.output_tokens} tokens · {last.latency_ms} ms · trace #{last.trace_id}
+                {last.input_tokens}+{last.output_tokens} tokens · {last.latency_ms} ms
               </p>
             </div>
           )}

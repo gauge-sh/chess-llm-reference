@@ -6,8 +6,7 @@
     python -m chess_llm.cli games             # list stored games
     python -m chess_llm.cli show 1            # move list for game 1
     python -m chess_llm.cli rewind 1 --ply 6  # board after 6 half-moves
-    python -m chess_llm.cli analyze 1         # performance metrics
-    python -m chess_llm.cli traces 1          # agent traces (LLM turns + tool calls)
+    python -m chess_llm.cli analyze 1         # per-game / per-player metrics
 """
 
 from __future__ import annotations
@@ -42,7 +41,7 @@ def _announce_result(session: GameSession) -> None:
 
 @click.group()
 def cli() -> None:
-    """Chess vs. an LLM, with games, moves, and agent traces stored locally."""
+    """Chess vs. an LLM, with games and moves stored locally."""
     init_db()
 
 
@@ -90,7 +89,7 @@ def play(color: str, model: str | None) -> None:
             flag = "  [fallback]" if choice.fallback else ""
             click.secho(f"LLM plays {applied.san} ({applied.uci}){note}{flag}", fg="magenta")
             click.echo(
-                f"  {choice.input_tokens}+{choice.output_tokens} tok, {choice.latency_ms} ms, trace #{choice.trace_id}"
+                f"  {choice.input_tokens}+{choice.output_tokens} tok, {choice.latency_ms} ms"
             )
 
 
@@ -169,27 +168,6 @@ def analyze(game_id: int, timeline: bool) -> None:
         for row in analysis.material_timeline(game_id):
             bar = ("+" if row["balance"] >= 0 else "") + str(row["balance"])
             click.echo(f"  ply {row['ply']:>3} {row['san']:<8} balance {bar}")
-
-
-@cli.command()
-@click.argument("game_id", type=int)
-def traces(game_id: int) -> None:
-    """Show agent traces (one per LLM turn) and their tool-call spans."""
-    rows = repository.get_traces(game_id)
-    if not rows:
-        click.echo("No traces for this game.")
-        return
-    for t in rows:
-        click.secho(
-            f"\nTrace #{t.id}  [{t.status}]  move_id={t.move_id}  "
-            f"{t.input_tokens}+{t.output_tokens} tok  {t.latency_ms} ms",
-            fg="cyan",
-        )
-        if t.error:
-            click.secho(f"  error: {t.error}", fg="red")
-        for sp in t.spans:
-            mark = "✗" if sp.is_error else "→"
-            click.echo(f"  {mark} {sp.tool_name}({sp.tool_input or ''}) = {sp.tool_output}")
 
 
 if __name__ == "__main__":
